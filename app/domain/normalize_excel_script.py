@@ -1,22 +1,17 @@
-from pathlib import Path
 import pandas as pd
 import re
 
 
 class NormalizeExcelScript:
-    def __init__(self, excel_path: Path, excel_output_path: Path) -> None:
-        self._excel_path: Path = excel_path
-        self._excel_output_path: Path = excel_output_path
-
-    def run_script(self) -> None:
-        df = self._load_excel()
-        df = self._parse_types(df)
-        df = self._normalize_gender(df)
-        df = self._clean_nationalities(df)
-        df = self._capitalize_nationalities(df)
-        df = self._apply_nationality_exceptions(df)
-        df = self._build_final_nationality(df)
-        self._export_excel(df)
+    def run_script(self, df: pd.DataFrame) -> pd.DataFrame:
+        result = df.copy()
+        result = self._parse_types(result)
+        result = self._normalize_gender(result)
+        result = self._clean_nationalities(result)
+        result = self._capitalize_nationalities(result)
+        result = self._apply_nationality_exceptions(result)
+        result = self._build_final_nationality(result)
+        return result
 
     def _parse_types(self, df: pd.DataFrame) -> pd.DataFrame:
         result = df.copy()
@@ -41,15 +36,6 @@ class NormalizeExcelScript:
 
         result = df.copy()
         result["Género"] = result["Género"].apply(_translate_gender)
-        return result
-
-    def _load_excel(self):
-        result: pd.DataFrame = (
-            pd.read_excel(self._excel_path, engine="calamine", dtype=object)
-            .fillna("")
-            .astype(str)
-        )
-        result.insert(0, "#", range(1, len(result) + 1))
         return result
 
     def _clean_nationalities(self, df: pd.DataFrame) -> pd.DataFrame:
@@ -117,9 +103,3 @@ class NormalizeExcelScript:
         result = df.copy()
         result["Nationality"] = result.apply(_combine, axis=1)  # type: ignore
         return result
-
-    def _export_excel(self, df: pd.DataFrame) -> None:
-        with pd.ExcelWriter(
-            self._excel_output_path, engine="xlsxwriter", datetime_format="dd/mm/yyyy"
-        ) as writer:
-            df.to_excel(writer, index=False, sheet_name="Sheet1")
