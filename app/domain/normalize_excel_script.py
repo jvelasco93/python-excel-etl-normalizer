@@ -11,15 +11,58 @@ class NormalizeExcelScript:
         result = self._capitalize_nationalities(result)
         result = self._apply_nationality_exceptions(result)
         result = self._build_final_nationality(result)
+        result = self._change_column_names(result)
+        result = self._clean_detention_cause_values(result)
+        result = self._clean_discapacity_values(result)
+        return result
+    
+    def _clean_discapacity_values(self, df: pd.DataFrame) -> pd.DataFrame:
+        if "Indique la discapacidad" not in df.columns:
+            return df.copy()
+        result = df.copy()
+        result["Indique la discapacidad"] = (
+            result["Indique la discapacidad"]
+            .astype(str)
+            .str.replace(r"^#\d+\s*", "", regex=True)
+            .str.strip()
+        )
+        return result
+    
+    def _clean_detention_cause_values(self, df: pd.DataFrame) -> pd.DataFrame:
+        result = df.copy()
+        result["Causa de la Detención:"] = (
+            result["Causa de la Detención:"]
+            .astype(str)
+            .str.replace(r"^#\d+\s*", "", regex=True)
+            .str.replace(r"\s*\(C\)$", "", regex=True)
+            .str.strip()
+        )
+        return result
+    
+    
+    def _change_column_names(self, df: pd.DataFrame) -> pd.DataFrame:
+        # Cambiar los nombres de las columnas siguientes:
+        # Nationality -> Nacionalidad
+        # Contacto -> Nombre
+        column_mapping = {
+            "Nationality": "Nacionalidad",
+            "Contacto": "Nombre",
+        }
+        result = df.copy()
+        result.rename(columns=column_mapping, inplace=True)
         return result
 
     def _parse_types(self, df: pd.DataFrame) -> pd.DataFrame:
+        def _parse_datetime(df_: pd.DataFrame, column_name: str, fmt: str) -> pd.DataFrame:
+            if column_name in df_.columns:
+                df_[column_name] = pd.to_datetime(df_[column_name], format=fmt, errors="coerce")
+        formats = {
+            "Fecha de Arresto": "%d/%m/%Y %I:%M%p",
+            "Fecha de Nacimiento": "%Y-%m-%d %H:%M:%S",
+        }
         result = df.copy()
-        result["Fecha de Arresto"] = pd.to_datetime(
-            result["Fecha de Arresto"],
-            format="%d/%m/%Y %I:%M%p",
-            errors="coerce",
-        )
+        for column_name, fmt in formats.items():
+            _parse_datetime(result, column_name, fmt)
         return result
 
     def _normalize_gender(self, df: pd.DataFrame) -> pd.DataFrame:
@@ -55,8 +98,9 @@ class NormalizeExcelScript:
 
     def _apply_nationality_exceptions(self, df: pd.DataFrame) -> pd.DataFrame:
         NATIONALITY_EXCEPTIONS: dict[str, str] = {
-            "trinidad y tobago": "Trinidad y Tobago",
-            "portugees": "Portugues",
+            "trinidad y tobago": "Trinitense",
+            "portugees": "Portugués",
+            "guyana": "Guyanés",
         }
 
         def _apply_exceptions(value: str | None) -> str | None:
@@ -68,6 +112,7 @@ class NormalizeExcelScript:
         result["Segunda Nacionalidad"] = result["Segunda Nacionalidad"].apply(
             _apply_exceptions
         )
+        result["Nationality"] = result["Nationality"].apply(_apply_exceptions)
         return result
 
     def _capitalize_nationalities(self, df: pd.DataFrame) -> pd.DataFrame:
