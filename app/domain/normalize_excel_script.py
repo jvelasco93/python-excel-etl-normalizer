@@ -15,7 +15,7 @@ class NormalizeExcelScript:
         result = self._clean_detention_cause_values(result)
         result = self._clean_discapacity_values(result)
         return result
-    
+
     def _clean_discapacity_values(self, df: pd.DataFrame) -> pd.DataFrame:
         if "Indique la discapacidad" not in df.columns:
             return df.copy()
@@ -27,7 +27,7 @@ class NormalizeExcelScript:
             .str.strip()
         )
         return result
-    
+
     def _clean_detention_cause_values(self, df: pd.DataFrame) -> pd.DataFrame:
         result = df.copy()
         result["Causa de la Detención:"] = (
@@ -38,8 +38,7 @@ class NormalizeExcelScript:
             .str.strip()
         )
         return result
-    
-    
+
     def _change_column_names(self, df: pd.DataFrame) -> pd.DataFrame:
         # Cambiar los nombres de las columnas siguientes:
         # Nationality -> Nacionalidad
@@ -53,9 +52,14 @@ class NormalizeExcelScript:
         return result
 
     def _parse_types(self, df: pd.DataFrame) -> pd.DataFrame:
-        def _parse_datetime(df_: pd.DataFrame, column_name: str, fmt: str) -> pd.DataFrame:
+        def _parse_datetime(
+            df_: pd.DataFrame, column_name: str, fmt: str
+        ) -> pd.DataFrame:
             if column_name in df_.columns:
-                df_[column_name] = pd.to_datetime(df_[column_name], format=fmt, errors="coerce")
+                df_[column_name] = pd.to_datetime(
+                    df_[column_name], format=fmt, errors="coerce"
+                )
+
         formats = {
             "Fecha de Arresto": "%d/%m/%Y %I:%M%p",
             "Fecha de Nacimiento": "%Y-%m-%d %H:%M:%S",
