@@ -10,3 +10,4 @@ wheels/
 .venv
 *.xlsx
 *.pdf
+*.spec
