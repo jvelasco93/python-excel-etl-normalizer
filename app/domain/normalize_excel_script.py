@@ -1,5 +1,7 @@
-import pandas as pd
 import re
+from typing import Callable, Iterable
+
+import pandas as pd
 
 
 class NormalizeExcelScript:
@@ -16,28 +18,52 @@ class NormalizeExcelScript:
         result = self._clean_discapacity_values(result)
         return result
 
-    def _clean_discapacity_values(self, df: pd.DataFrame) -> pd.DataFrame:
-        if "Indique la discapacidad" not in df.columns:
+    def _apply_if_column_exists(
+        self,
+        df: pd.DataFrame,
+        column_name: str,
+        transform: Callable[[pd.Series], pd.Series],
+    ) -> pd.DataFrame:
+        if column_name not in df.columns:
             return df.copy()
+
         result = df.copy()
-        result["Indique la discapacidad"] = (
-            result["Indique la discapacidad"]
-            .astype(str)
-            .str.replace(r"^#\d+\s*", "", regex=True)
-            .str.strip()
-        )
+        result[column_name] = transform(result[column_name])
         return result
 
-    def _clean_detention_cause_values(self, df: pd.DataFrame) -> pd.DataFrame:
+    def _apply_per_existing_columns(
+        self,
+        df: pd.DataFrame,
+        column_names: Iterable[str],
+        transform: Callable[[pd.Series], pd.Series],
+    ) -> pd.DataFrame:
+        existing_columns = [column for column in column_names if column in df.columns]
+        if not existing_columns:
+            return df.copy()
+
         result = df.copy()
-        result["Causa de la Detención:"] = (
-            result["Causa de la Detención:"]
-            .astype(str)
+        for column in existing_columns:
+            result[column] = transform(result[column])
+        return result
+
+    def _clean_discapacity_values(self, df: pd.DataFrame) -> pd.DataFrame:
+        return self._apply_if_column_exists(
+            df,
+            "Indique la discapacidad",
+            lambda series: series.astype(str)
+            .str.replace(r"^#\d+\s*", "", regex=True)
+            .str.strip(),
+        )
+
+    def _clean_detention_cause_values(self, df: pd.DataFrame) -> pd.DataFrame:
+        return self._apply_if_column_exists(
+            df,
+            "Causa de la Detención:",
+            lambda series: series.astype(str)
             .str.replace(r"^#\d+\s*", "", regex=True)
             .str.replace(r"\s*\(C\)$", "", regex=True)
-            .str.strip()
+            .str.strip(),
         )
-        return result
 
     def _change_column_names(self, df: pd.DataFrame) -> pd.DataFrame:
         # Cambiar los nombres de las columnas siguientes:
@@ -63,6 +89,11 @@ class NormalizeExcelScript:
         formats = {
             "Fecha de Arresto": "%d/%m/%Y %I:%M%p",
             "Fecha de Nacimiento": "%Y-%m-%d %H:%M:%S",
+            "Fecha Inicial Estatus 1": "%d/%m/%Y %I:%M%p",
+            "Fecha Inicial Estatus 2": "%d/%m/%Y %I:%M%p",
+            "Fecha Inicial Estatus 3": "%d/%m/%Y %I:%M%p",
+            "Fecha Inicial Estatus 4": "%d/%m/%Y %I:%M%p",
+
         }
         result = df.copy()
         for column_name, fmt in formats.items():
@@ -81,9 +112,11 @@ class NormalizeExcelScript:
 
             return GENDER_TRANSLATIONS.get(a_value.lower(), a_value)
 
-        result = df.copy()
-        result["Género"] = result["Género"].apply(_translate_gender)
-        return result
+        return self._apply_if_column_exists(
+            df,
+            "Género",
+            lambda series: series.apply(_translate_gender),
+        )
 
     def _clean_nationalities(self, df: pd.DataFrame) -> pd.DataFrame:
         def _clean_value(value: str) -> str | None:
@@ -94,11 +127,11 @@ class NormalizeExcelScript:
 
             return cleaned if cleaned else None
 
-        result = df.copy()
-        for column in ["Nationality", "Segunda Nacionalidad"]:
-            result[column] = result[column].apply(_clean_value)
-
-        return result
+        return self._apply_per_existing_columns(
+            df,
+            ["Nationality", "Segunda Nacionalidad"],
+            lambda series: series.apply(_clean_value),
+        )
 
     def _apply_nationality_exceptions(self, df: pd.DataFrame) -> pd.DataFrame:
         NATIONALITY_EXCEPTIONS: dict[str, str] = {
@@ -112,12 +145,11 @@ class NormalizeExcelScript:
                 return None
             return NATIONALITY_EXCEPTIONS.get(value.lower().strip(), value)
 
-        result = df.copy()
-        result["Segunda Nacionalidad"] = result["Segunda Nacionalidad"].apply(
-            _apply_exceptions
+        return self._apply_per_existing_columns(
+            df,
+            ["Segunda Nacionalidad", "Nationality"],
+            lambda series: series.apply(_apply_exceptions),
         )
-        result["Nationality"] = result["Nationality"].apply(_apply_exceptions)
-        return result
 
     def _capitalize_nationalities(self, df: pd.DataFrame) -> pd.DataFrame:
         def _capitalize(value: str | None) -> str | None:
@@ -125,12 +157,16 @@ class NormalizeExcelScript:
                 return None
             return value.title()
 
-        result = df.copy()
-        for column in ["Nationality", "Segunda Nacionalidad"]:
-            result[column] = result[column].apply(_capitalize)
-        return result
+        return self._apply_per_existing_columns(
+            df,
+            ["Nationality", "Segunda Nacionalidad"],
+            lambda series: series.apply(_capitalize),
+        )
 
     def _build_final_nationality(self, df: pd.DataFrame) -> pd.DataFrame:
+        if "Nationality" not in df.columns and "Segunda Nacionalidad" not in df.columns:
+            return df.copy()
+
         def _combine(row: pd.Series) -> str | None:
             nat1 = row.get("Nationality")
             nat2 = row.get("Segunda Nacionalidad")
@@ -150,5 +186,10 @@ class NormalizeExcelScript:
             return None
 
         result = df.copy()
+        if "Nationality" not in result.columns:
+            result["Nationality"] = None
+        if "Segunda Nacionalidad" not in result.columns:
+            result["Segunda Nacionalidad"] = None
+
         result["Nationality"] = result.apply(_combine, axis=1)  # type: ignore
         return result
