@@ -16,6 +16,7 @@ class NormalizeExcelScript:
         result = self._change_column_names(result)
         result = self._clean_detention_cause_values(result)
         result = self._clean_discapacity_values(result)
+        result = self._calculate_age(result)
         return result
 
     def _apply_if_column_exists(
@@ -192,4 +193,19 @@ class NormalizeExcelScript:
             result["Segunda Nacionalidad"] = None
 
         result["Nationality"] = result.apply(_combine, axis=1)  # type: ignore
+        return result
+
+    def _calculate_age(self, df: pd.DataFrame) -> pd.DataFrame:
+        result = df.copy()
+        if "Fecha de Nacimiento" not in df.columns:
+            return result
+        ref = pd.Timestamp.now()
+        birth = result["Fecha de Nacimiento"]
+        result["Edad"] = (
+        ref.year - birth.dt.year -
+        (
+            (birth.dt.month > ref.month) |
+            ((birth.dt.month == ref.month) & (birth.dt.day > ref.day))
+        ).astype(int)
+        )
         return result
